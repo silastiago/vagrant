@@ -1,0 +1,58 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby  :
+
+bootstrap = <<SCRIPT
+  useradd -m n0c
+  cp -pr /home/vagrant/.ssh /home/admin/
+  chown -R admin. /home/admin
+  echo "admin ALL=(ALL)       ALL" > /etc/sudoers.d/admin
+  sed -i 's/PasswordAuthentication/#PasswordAuthentication/' /etc/ssh/sshd_config
+  sed -i 's/SELINUX=enforcing/SELINUX=disabled/' /etc/sysconfig/selinux
+  sed -i 's/SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
+  systemctl restart sshd
+  systemctl disable firewalld
+  echo "your password here" | passwd --stdin n0c
+  reboot
+SCRIPT
+
+
+machines = {
+  "Awx" => {
+			"memory" => "2048", 
+			"cpu" => "2", 
+			"vlan" => 'v-192',
+ 			"vlanGerencia" => "v-gerencia-servidores", 
+			"ip" => "30", 
+			"image" => "centos/7"}
+}
+
+Vagrant.configure("2") do |config|
+
+  config.vm.box_check_update = false
+  machines.each do |name, conf|
+    config.vm.define "#{name}" do |machine|
+      machine.vm.box = "#{conf["image"]}"
+      machine.vm.hostname = "#{name}"
+      machine.vm.network "private_network", ip: "192.168.200.#{conf["ip"]}", netmask: "255.255.255.0" 
+      machine.vm.synced_folder('.', '/vagrant', type: 'nfs', disabled: true)
+      machine.vm.provision "shell", inline: "#{bootstrap}", privileged: true
+      machine.vm.provider "vmware_esxi" do |vb|
+	        #IP or hostanem on server esxi
+          vb.esxi_hostname = '192.168.200.3'
+		      #User ssh on server esxi
+          vb.esxi_username = 'admin'
+      		#Password on user ssh on server esxi
+          vb.esxi_password = '99$FSFRSKFRF'
+      		#Number de memory on server esxi
+          vb.guest_memsize = conf["memory"]
+          #Number on cpu on server esxi
+          vb.guest_numvcpus = conf["cpu"]
+		vb.esxi_virtual_network = [ conf["vlan"], conf["vlanGerencia"] ]
+		vb.esxi_disk_store = 'STORAGE HUAWEI'
+		vb.guest_guestos = 'linux'
+		vb.guest_name = "#{name}"
+      end
+    end
+  end
+end
+
